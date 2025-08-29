@@ -1,14 +1,16 @@
 import { Router } from "express"
-import jwt from "jsonwebtoken"
+import jwt, { sign } from "jsonwebtoken"
 import authMiddleware from "../middleware";
-const router: Router = Router();
 import { JWT_SECRET } from "@repo/backend-common/config"
 import { prisma } from "@repo/db/db"
 import { CreateUserSchema, SigninSchema, CreateRoomSchema } from "@repo/common/types"
+import bcrypt from "bcrypt"
+
+const router: Router = Router();
 
 router.post("/signup", async (req, res) => {
-    const data = CreateUserSchema.safeParse(req.body);
-    if (!data.success) {
+    const parsedData = CreateUserSchema.safeParse(req.body);
+    if (!parsedData.success) {
         res.json({
             message: "Incorrect Inputs"
         })
@@ -16,18 +18,25 @@ router.post("/signup", async (req, res) => {
     }
 
     try {
-        const signup = await prisma.user.create({
+        const salt = await bcrypt.genSalt(10)
+        const hashedPass = await bcrypt.hash(parsedData.data.password, salt);
+        const user = await prisma.user.create({
             data: {
-                name,
-                email,
-                password,
+                username: parsedData.data?.username,
+                email: parsedData.data?.email,
+                password: hashedPass
+
             }
         })
+
         const token = jwt.sign({
-            // @ts-ignore
             userId: user.id
         }, JWT_SECRET, { expiresIn: '1h' });
-        res.json(token)
+        return res.json({
+            message: "Signin successful",
+            user: { id: user.id, username: user.username, email: user.email },
+            token,
+        });
     }
     catch (error) {
         return res.status(500).json({ message: "Internal server error", error })
@@ -36,22 +45,39 @@ router.post("/signup", async (req, res) => {
 });
 
 
-router.post("/signin", (req, res) => {
-    const data = SigninSchema.safeParse(req.body);
-    if (!data.success) {
+router.post("/signin", async (req, res) => {
+    const signinData = SigninSchema.safeParse(req.body);
+    if (!signinData.success) {
         res.json({
             message: "Incorrect Inputs"
         })
         return;
     }
     try {
-
-
+        const user = await prisma.user.findUnique({
+            where: {
+                email: signinData.data.email,
+            }
+        })
+        if (!user) {
+            res.json({ message: "Email or password is incorrect" })
+            return;
+        }
+        const comparePassword = await bcrypt.compare(signinData.data.password, user.password)
+        if (!comparePassword) {
+            res.status(400).json({
+                message: "Email or password is incorrect"
+            })
+            return;
+        }
         const token = jwt.sign({
-            // @ts-ignore
             userId: user.id
         }, JWT_SECRET, { expiresIn: '1h' });
-        res.json(token)
+        return res.json({
+            message: "Signin successful",
+            user: { id: user.id, username: user.username, email: user.email },
+            token,
+        });
     }
     catch (error) {
         return res.status(500).json({ message: "Internal server error", error })
@@ -70,6 +96,7 @@ router.post("/room", authMiddleware, (req, res) => {
         return;
     }
 })
+
 
 
 

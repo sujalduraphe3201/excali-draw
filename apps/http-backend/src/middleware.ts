@@ -1,7 +1,6 @@
-import jwt from "jsonwebtoken"
+import jwt, { decode } from "jsonwebtoken"
 import { Request, Response, NextFunction } from 'express';
 const JWT_SECRET = "secretkey"
-
 
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
@@ -14,8 +13,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     if (!token) {
         return res.status(401).json({ message: "Token missing" });
     }
-    const decoded = jwt.verify(token, JWT_SECRET)
-    const userId = req.body.userId
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
     if (decoded) {
         req.userId = decoded.userId
         next();
