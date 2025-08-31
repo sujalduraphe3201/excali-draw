@@ -1,5 +1,5 @@
 import { Router } from "express"
-import jwt, { sign } from "jsonwebtoken"
+import jwt from "jsonwebtoken"
 import authMiddleware from "../middleware";
 import { JWT_SECRET } from "@repo/backend-common/config"
 import { prisma } from "@repo/db/db"
@@ -33,7 +33,7 @@ router.post("/signup", async (req, res) => {
             userId: user.id
         }, JWT_SECRET, { expiresIn: '1h' });
         return res.json({
-            message: "Signin successful",
+            message: "Signup successful",
             user: { id: user.id, username: user.username, email: user.email },
             token,
         });
@@ -70,6 +70,8 @@ router.post("/signin", async (req, res) => {
             })
             return;
         }
+
+
         const token = jwt.sign({
             userId: user.id
         }, JWT_SECRET, { expiresIn: '1h' });
@@ -87,15 +89,32 @@ router.post("/signin", async (req, res) => {
 
 });
 
-router.post("/room", authMiddleware, (req, res) => {
-    const data = CreateRoomSchema.safeParse(req.body);
-    if (!data.success) {
-        res.json({
-            message: "Incorrect Inputs"
-        })
-        return;
+router.post("/room", authMiddleware, async (req, res) => {
+    const roomdata = CreateRoomSchema.safeParse(req.body);
+    if (!roomdata.success) {
+        return res.status(400).json({ message: "Incorrect Inputs" });
     }
-})
+
+    const userId = req.userId;
+    if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+        const room = await prisma.room.create({
+            data: {
+                slug: roomdata.data.slug,
+                adminId: userId,
+            }
+        });
+        return res.status(201).json({
+            message: "Room created successfully",
+            room,
+        });
+    } catch (e) {
+        return res.status(500).json({ message: "Internal server error" });
+    }
+});
 
 
 
